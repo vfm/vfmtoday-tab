@@ -8,122 +8,121 @@
         * { margin: 0; padding: 0; box-sizing: border-box; }
         html, body { width: 100%; height: 100%; overflow: hidden; }
         iframe { width: 100%; height: 100%; border: none; display: block; }
-        #status {
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            width: 100%;
-            height: 100%;
+        #login-hint {
+            display: none;
+            position: fixed;
+            bottom: 24px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #fff;
+            border: 1px solid #e1dfdd;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,.15);
+            padding: 16px 24px;
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             color: #323130;
-            gap: 16px;
+            text-align: center;
+            z-index: 100;
+            max-width: 400px;
         }
-        #status .spinner {
-            width: 32px; height: 32px;
-            border: 3px solid #e1dfdd;
-            border-top-color: #0078d4;
-            border-radius: 50%;
-            animation: spin .8s linear infinite;
-        }
-        @keyframes spin { to { transform: rotate(360deg); } }
-        #retry-btn {
-            display: none;
+        #login-hint a {
+            display: inline-block;
+            margin-top: 8px;
             padding: 8px 24px;
             background: #0078d4;
             color: #fff;
             border: none;
             border-radius: 4px;
             font-size: 14px;
+            text-decoration: none;
             cursor: pointer;
         }
-        #retry-btn:hover { background: #106ebe; }
+        #login-hint a:hover { background: #106ebe; }
+        #login-hint .dismiss {
+            display: inline-block;
+            margin-top: 8px;
+            margin-left: 12px;
+            padding: 8px 16px;
+            background: transparent;
+            color: #666;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 13px;
+            text-decoration: none;
+            cursor: pointer;
+        }
     </style>
 </head>
 <body>
-    <!-- Status-Anzeige während Authentifizierung -->
-    <div id="status">
-        <div class="spinner" id="spinner"></div>
-        <span id="status-text">Anmeldung wird durchgeführt&hellip;</span>
-        <button id="retry-btn" onclick="authenticateAndLoad()">Erneut anmelden</button>
-    </div>
+    <!-- Kalender-iFrame – wird sofort geladen -->
+    <iframe id="content"></iframe>
 
-    <!-- Kalender-iFrame (initial versteckt) -->
-    <iframe id="content" style="display:none;"></iframe>
+    <!-- Anmelde-Hinweis (nur bei Bedarf sichtbar) -->
+    <div id="login-hint">
+        <div>Falls der Kalender nicht angezeigt wird, bitte einmalig anmelden:</div>
+        <a id="login-btn" href="#" target="_blank">Anmelden</a>
+        <a class="dismiss" id="dismiss-btn" href="#">Ausblenden</a>
+    </div>
 
     <script src="https://res.cdn.office.net/teams-js/2.24.0/js/MicrosoftTeams.min.js"></script>
     <script>
         (function () {
             var RELOAD_INTERVAL_MS = 60 * 60 * 1000; // 1 Stunde
             var TARGET_URL  = 'https://vfmtoday.vfm.de/kalender';
-            var AUTH_URL    = 'https://vfm.github.io/vfmtoday-tab/auth-end.html';
+            var HINT_DELAY  = 4000; // Nach 4s Hinweis zeigen
 
-            var iframe     = document.getElementById('content');
-            var statusDiv  = document.getElementById('status');
-            var statusText = document.getElementById('status-text');
-            var spinner    = document.getElementById('spinner');
-            var retryBtn   = document.getElementById('retry-btn');
+            var iframe    = document.getElementById('content');
+            var loginHint = document.getElementById('login-hint');
+            var loginBtn  = document.getElementById('login-btn');
+            var dismissBtn = document.getElementById('dismiss-btn');
 
-            /** iframe anzeigen, Status-Overlay ausblenden */
-            function showContent() {
-                statusDiv.style.display = 'none';
-                iframe.style.display    = 'block';
-            }
+            var hintTimer = null;
+            var calendarLoaded = false;
 
             /** Kalender im iframe laden */
             function loadKalender() {
                 iframe.src = TARGET_URL + '?_t=' + Date.now();
-                showContent();
             }
+
+            /** Prüfen ob der iframe erfolgreich geladen hat */
+            iframe.addEventListener('load', function () {
+                // Wenn der iframe geladen hat und die Entra-Session gültig ist,
+                // wird der Kalender angezeigt. Da wir wegen Cross-Origin den
+                // Inhalt nicht prüfen können, nehmen wir an dass alles OK ist
+                // und blenden den Hinweis aus.
+                calendarLoaded = true;
+                if (hintTimer) {
+                    clearTimeout(hintTimer);
+                    hintTimer = null;
+                }
+                loginHint.style.display = 'none';
+            });
+
+            /** Anmelden-Button: Öffnet Kalender in neuem Tab */
+            loginBtn.addEventListener('click', function (e) {
+                e.preventDefault();
+                window.open(TARGET_URL, '_blank');
+                // Nach dem Anmelden im neuen Tab: Hinweis ändern
+                loginHint.innerHTML =
+                    '<div>Nach der Anmeldung hier klicken:</div>' +
+                    '<a href="#" id="reload-btn" style="display:inline-block;margin-top:8px;padding:8px 24px;background:#0078d4;color:#fff;border:none;border-radius:4px;font-size:14px;text-decoration:none;cursor:pointer;">Kalender neu laden</a>';
+                document.getElementById('reload-btn').addEventListener('click', function (ev) {
+                    ev.preventDefault();
+                    loginHint.style.display = 'none';
+                    loadKalender();
+                });
+            });
+
+            /** Ausblenden-Button */
+            dismissBtn.addEventListener('click', function (e) {
+                e.preventDefault();
+                loginHint.style.display = 'none';
+            });
 
             /** Cache-Bust-Reload des iframes */
             function reloadContent() {
-                if (iframe.style.display !== 'none') {
-                    iframe.src = TARGET_URL + '?_t=' + Date.now();
-                }
+                iframe.src = TARGET_URL + '?_t=' + Date.now();
             }
-
-            /**
-             * Authentifizierung per Popup-Fenster:
-             * 1. window.open() öffnet vfmtoday.vfm.de in einem kleinen Fenster
-             * 2. Der Entra Application Proxy leitet auf login.microsoftonline.com um
-             * 3. SSO greift automatisch (Benutzer ist in Teams angemeldet)
-             * 4. Nach erfolgreicher Anmeldung lädt das Popup den Kalender
-             * 5. Wir schließen das Popup nach kurzer Zeit automatisch
-             * 6. Der iframe lädt den Kalender mit den gültigen Session-Cookies
-             */
-            window.authenticateAndLoad = function () {
-                statusDiv.style.display = 'flex';
-                spinner.style.display   = 'block';
-                retryBtn.style.display  = 'none';
-                statusText.textContent  = 'Anmeldung wird durchgeführt\u2026';
-                iframe.style.display    = 'none';
-
-                // Popup für Entra-Authentifizierung öffnen
-                var authPopup = null;
-                try {
-                    authPopup = window.open(
-                        TARGET_URL,
-                        'vfmauth',
-                        'width=500,height=500,menubar=no,toolbar=no'
-                    );
-                } catch (e) {
-                    console.warn('Popup konnte nicht geöffnet werden:', e);
-                }
-
-                // Nach 5 Sekunden: Popup schließen und Kalender laden
-                // (SSO-Anmeldung ist bis dahin im Hintergrund erledigt)
-                setTimeout(function () {
-                    try {
-                        if (authPopup && !authPopup.closed) {
-                            authPopup.close();
-                        }
-                    } catch (e) { /* ignore */ }
-
-                    statusText.textContent = 'Kalender wird geladen\u2026';
-                    loadKalender();
-                }, 5000);
-            };
 
             // Automatisches Neuladen alle 1 Stunde
             setInterval(reloadContent, RELOAD_INTERVAL_MS);
@@ -135,10 +134,18 @@
                 }
             });
 
-            // Teams SDK initialisieren, dann authentifizieren
+            // Teams SDK initialisieren, dann Kalender direkt laden
             microsoftTeams.app.initialize().then(function () {
                 microsoftTeams.app.notifySuccess();
-                window.authenticateAndLoad();
+
+                // Kalender sofort im iframe laden
+                loadKalender();
+
+                // Nach 4 Sekunden: Falls der iframe leer/blockiert ist,
+                // Anmelde-Hinweis einblenden
+                hintTimer = setTimeout(function () {
+                    loginHint.style.display = 'block';
+                }, HINT_DELAY);
             });
         })();
     </script>
