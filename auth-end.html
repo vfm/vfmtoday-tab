@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="utf-8">
+    <title>Authentifizierung abgeschlossen</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background: #f3f2f1;
+            color: #323130;
+        }
+    </style>
+</head>
+<body>
+    <p>Authentifizierung erfolgreich &ndash; Fenster wird geschlossen&hellip;</p>
+
+    <script src="https://res.cdn.office.net/teams-js/2.24.0/js/MicrosoftTeams.min.js"></script>
+    <script>
+        // Diese Seite wird im Auth-Popup geladen, NACHDEM der Entra
+        // Application Proxy die Anmeldung erfolgreich durchgeführt hat.
+        // Die Session-Cookies für vfmtoday.vfm.de sind jetzt gesetzt.
+        microsoftTeams.app.initialize().then(function () {
+            microsoftTeams.authentication.notifySuccess('authenticated');
+        }).catch(function () {
+            // Fallback
+            microsoftTeams.authentication.notifyFailure('InitError');
+        });
+    </script>
+</body>
+</html>

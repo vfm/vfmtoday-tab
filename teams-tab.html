@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>vfm Today</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html, body { width: 100%; height: 100%; overflow: hidden; }
+        iframe { width: 100%; height: 100%; border: none; display: block; }
+        #status {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            width: 100%;
+            height: 100%;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            color: #323130;
+            gap: 16px;
+        }
+        #status .spinner {
+            width: 32px; height: 32px;
+            border: 3px solid #e1dfdd;
+            border-top-color: #0078d4;
+            border-radius: 50%;
+            animation: spin .8s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        #retry-btn {
+            display: none;
+            padding: 8px 24px;
+            background: #0078d4;
+            color: #fff;
+            border: none;
+            border-radius: 4px;
+            font-size: 14px;
+            cursor: pointer;
+        }
+        #retry-btn:hover { background: #106ebe; }
+    </style>
+</head>
+<body>
+    <!-- Status-Anzeige während Authentifizierung -->
+    <div id="status">
+        <div class="spinner" id="spinner"></div>
+        <span id="status-text">Anmeldung wird durchgeführt&hellip;</span>
+        <button id="retry-btn" onclick="authenticateAndLoad()">Erneut anmelden</button>
+    </div>
+
+    <!-- Kalender-iFrame (initial versteckt) -->
+    <iframe id="content" style="display:none;"></iframe>
+
+    <script src="https://res.cdn.office.net/teams-js/2.24.0/js/MicrosoftTeams.min.js"></script>
+    <script>
+        (function () {
+            var RELOAD_INTERVAL_MS = 60 * 60 * 1000; // 1 Stunde
+            var TARGET_URL  = 'https://vfmtoday.vfm.de/kalender';
+            var AUTH_URL    = 'https://vfm.github.io/vfmtoday-tab/auth-end.html';
+
+            var iframe     = document.getElementById('content');
+            var statusDiv  = document.getElementById('status');
+            var statusText = document.getElementById('status-text');
+            var spinner    = document.getElementById('spinner');
+            var retryBtn   = document.getElementById('retry-btn');
+
+            /** iframe anzeigen, Status-Overlay ausblenden */
+            function showContent() {
+                statusDiv.style.display = 'none';
+                iframe.style.display    = 'block';
+            }
+
+            /** Kalender im iframe laden */
+            function loadKalender() {
+                iframe.src = TARGET_URL + '?_t=' + Date.now();
+                showContent();
+            }
+
+            /** Cache-Bust-Reload des iframes */
+            function reloadContent() {
+                if (iframe.style.display !== 'none') {
+                    iframe.src = TARGET_URL + '?_t=' + Date.now();
+                }
+            }
+
+            /**
+             * Authentifizierung per Popup:
+             * 1. Teams öffnet ein Popup zu vfmtoday.vfm.de (hinter Entra App Proxy)
+             * 2. Der Entra Application Proxy leitet auf login.microsoftonline.com um
+             * 3. Nach erfolgreicher Anmeldung wird zurück zu vfmtoday.vfm.de geleitet
+             * 4. Von dort Redirect zu auth-end.html auf GitHub Pages
+             * 5. auth-end.html ruft notifySuccess() auf → Popup schließt sich
+             * 6. Die Session-Cookies für vfmtoday.vfm.de sind nun gesetzt
+             * 7. Der iframe kann den Kalender laden
+             */
+            window.authenticateAndLoad = function () {
+                statusDiv.style.display = 'flex';
+                spinner.style.display   = 'block';
+                retryBtn.style.display  = 'none';
+                statusText.textContent  = 'Anmeldung wird durchgeführt\u2026';
+                iframe.style.display    = 'none';
+
+                microsoftTeams.authentication.authenticate({
+                    url: TARGET_URL,
+                    width: 600,
+                    height: 535
+                }).then(function () {
+                    loadKalender();
+                }).catch(function (err) {
+                    console.warn('Auth-Popup Ergebnis:', err);
+                    // Trotzdem versuchen – evtl. Session bereits gültig
+                    loadKalender();
+                });
+            };
+
+            // Automatisches Neuladen alle 1 Stunde
+            setInterval(reloadContent, RELOAD_INTERVAL_MS);
+
+            // Neuladen wenn der Tab wieder sichtbar wird
+            document.addEventListener('visibilitychange', function () {
+                if (document.visibilityState === 'visible') {
+                    reloadContent();
+                }
+            });
+
+            // Teams SDK initialisieren, dann authentifizieren
+            microsoftTeams.app.initialize().then(function () {
+                microsoftTeams.app.notifySuccess();
+                window.authenticateAndLoad();
+            });
+        })();
+    </script>
+</body>
+</html>
