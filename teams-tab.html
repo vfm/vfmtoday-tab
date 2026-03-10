@@ -88,10 +88,9 @@
              * 1. Teams öffnet ein Popup zu vfmtoday.vfm.de (hinter Entra App Proxy)
              * 2. Der Entra Application Proxy leitet auf login.microsoftonline.com um
              * 3. Nach erfolgreicher Anmeldung wird zurück zu vfmtoday.vfm.de geleitet
-             * 4. Von dort Redirect zu auth-end.html auf GitHub Pages
-             * 5. auth-end.html ruft notifySuccess() auf → Popup schließt sich
-             * 6. Die Session-Cookies für vfmtoday.vfm.de sind nun gesetzt
-             * 7. Der iframe kann den Kalender laden
+             * 4. Die Session-Cookies für vfmtoday.vfm.de sind nun gesetzt
+             * 5. Nach einem Timeout wird der iframe geladen (Popup kann kein
+             *    notifySuccess aufrufen, da wir die Zielseite nicht ändern können)
              */
             window.authenticateAndLoad = function () {
                 statusDiv.style.display = 'flex';
@@ -100,17 +99,30 @@
                 statusText.textContent  = 'Anmeldung wird durchgeführt\u2026';
                 iframe.style.display    = 'none';
 
+                var loaded = false;
+
+                function doLoad() {
+                    if (loaded) return;
+                    loaded = true;
+                    loadKalender();
+                }
+
+                // Auth-Popup öffnen (setzt die Entra-Session-Cookies)
                 microsoftTeams.authentication.authenticate({
                     url: TARGET_URL,
                     width: 600,
                     height: 535
-                }).then(function () {
-                    loadKalender();
-                }).catch(function (err) {
-                    console.warn('Auth-Popup Ergebnis:', err);
-                    // Trotzdem versuchen – evtl. Session bereits gültig
-                    loadKalender();
-                });
+                }).then(doLoad).catch(doLoad);
+
+                // Fallback-Timeout: Nach 8 Sekunden ist die SSO-Anmeldung
+                // im Popup erledigt. Kalender laden, auch wenn das Popup
+                // noch offen ist (Benutzer kann es manuell schließen).
+                setTimeout(function () {
+                    if (!loaded) {
+                        statusText.textContent = 'Kalender wird geladen\u2026';
+                    }
+                    doLoad();
+                }, 8000);
             };
 
             // Automatisches Neuladen alle 1 Stunde
