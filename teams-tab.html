@@ -84,13 +84,13 @@
             }
 
             /**
-             * Authentifizierung per Popup:
-             * 1. Teams öffnet ein Popup zu vfmtoday.vfm.de (hinter Entra App Proxy)
+             * Authentifizierung per Popup-Fenster:
+             * 1. window.open() öffnet vfmtoday.vfm.de in einem kleinen Fenster
              * 2. Der Entra Application Proxy leitet auf login.microsoftonline.com um
-             * 3. Nach erfolgreicher Anmeldung wird zurück zu vfmtoday.vfm.de geleitet
-             * 4. Die Session-Cookies für vfmtoday.vfm.de sind nun gesetzt
-             * 5. Nach einem Timeout wird der iframe geladen (Popup kann kein
-             *    notifySuccess aufrufen, da wir die Zielseite nicht ändern können)
+             * 3. SSO greift automatisch (Benutzer ist in Teams angemeldet)
+             * 4. Nach erfolgreicher Anmeldung lädt das Popup den Kalender
+             * 5. Wir schließen das Popup nach kurzer Zeit automatisch
+             * 6. Der iframe lädt den Kalender mit den gültigen Session-Cookies
              */
             window.authenticateAndLoad = function () {
                 statusDiv.style.display = 'flex';
@@ -99,30 +99,30 @@
                 statusText.textContent  = 'Anmeldung wird durchgeführt\u2026';
                 iframe.style.display    = 'none';
 
-                var loaded = false;
-
-                function doLoad() {
-                    if (loaded) return;
-                    loaded = true;
-                    loadKalender();
+                // Popup für Entra-Authentifizierung öffnen
+                var authPopup = null;
+                try {
+                    authPopup = window.open(
+                        TARGET_URL,
+                        'vfmauth',
+                        'width=500,height=500,menubar=no,toolbar=no'
+                    );
+                } catch (e) {
+                    console.warn('Popup konnte nicht geöffnet werden:', e);
                 }
 
-                // Auth-Popup öffnen (setzt die Entra-Session-Cookies)
-                microsoftTeams.authentication.authenticate({
-                    url: TARGET_URL,
-                    width: 600,
-                    height: 535
-                }).then(doLoad).catch(doLoad);
-
-                // Fallback-Timeout: Nach 8 Sekunden ist die SSO-Anmeldung
-                // im Popup erledigt. Kalender laden, auch wenn das Popup
-                // noch offen ist (Benutzer kann es manuell schließen).
+                // Nach 5 Sekunden: Popup schließen und Kalender laden
+                // (SSO-Anmeldung ist bis dahin im Hintergrund erledigt)
                 setTimeout(function () {
-                    if (!loaded) {
-                        statusText.textContent = 'Kalender wird geladen\u2026';
-                    }
-                    doLoad();
-                }, 8000);
+                    try {
+                        if (authPopup && !authPopup.closed) {
+                            authPopup.close();
+                        }
+                    } catch (e) { /* ignore */ }
+
+                    statusText.textContent = 'Kalender wird geladen\u2026';
+                    loadKalender();
+                }, 5000);
             };
 
             // Automatisches Neuladen alle 1 Stunde
