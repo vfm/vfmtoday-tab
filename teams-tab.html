@@ -5,111 +5,68 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>vfm Today</title>
     <script>
-        // Erkennung: Nicht-Windows → Dialog-/Browser-Ansatz (macOS, iPhone, Android)
         // Nur Windows Desktop nutzt den iframe (WebView2 teilt Edge-Cookies).
-        var _isNonWindows = (function () {
-            var ua = navigator.userAgent || '';
-            return !/Windows NT/i.test(ua);
-        })();
+        var _isNonWindows = !/Windows NT/i.test(navigator.userAgent || '');
     </script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        html, body { width: 100%; height: 100%; overflow: hidden; }
+        html, body { width: 100%; height: 100%; overflow: hidden;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            color: #c8c6c4; background: #1f1f1f; }
         iframe { width: 100%; height: 100%; border: none; display: block; }
-        #mobile-hint {
-            display: none;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            width: 100%;
-            height: 100%;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            color: #323130;
+        #non-win {
+            display: none; flex-direction: column; justify-content: center;
+            align-items: center; width: 100%; height: 100%; gap: 20px; padding: 24px;
             text-align: center;
-            gap: 16px;
-            padding: 24px;
         }
-        #mobile-hint .title {
-            font-size: 18px;
-            font-weight: 600;
+        #non-win .title { font-size: 20px; font-weight: 600; color: #e1dfdd; }
+        #non-win .btn {
+            display: inline-block; padding: 14px 36px; background: #0078d4;
+            color: #fff; border: none; border-radius: 6px; font-size: 16px;
+            text-decoration: none; cursor: pointer;
         }
-        #mobile-hint .open-btn {
-            display: inline-block;
-            padding: 12px 32px;
-            background: #0078d4;
-            color: #fff;
-            border: none;
-            border-radius: 6px;
-            font-size: 16px;
-            text-decoration: none;
-            cursor: pointer;
-        }
-        #mobile-hint .open-btn:hover { background: #106ebe; }
+        #non-win .btn:hover { background: #106ebe; }
+        #non-win .sub { font-size: 13px; color: #999; }
+        #non-win .sub a { color: #4da3e0; }
         #login-hint {
-            display: none;
-            position: fixed;
-            bottom: 24px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: #fff;
-            border: 1px solid #e1dfdd;
-            border-radius: 8px;
-            box-shadow: 0 2px 8px rgba(0,0,0,.15);
-            padding: 16px 24px;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            color: #323130;
-            text-align: center;
-            z-index: 100;
-            max-width: 400px;
+            display: none; position: fixed; bottom: 24px; left: 50%;
+            transform: translateX(-50%); background: #292929; border: 1px solid #3b3b3b;
+            border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,.3);
+            padding: 16px 24px; text-align: center; z-index: 100; max-width: 400px;
         }
         #login-hint a {
-            display: inline-block;
-            margin-top: 8px;
-            padding: 8px 24px;
-            background: #0078d4;
-            color: #fff;
-            border: none;
-            border-radius: 4px;
-            font-size: 14px;
-            text-decoration: none;
-            cursor: pointer;
+            display: inline-block; margin-top: 8px; padding: 8px 24px;
+            background: #0078d4; color: #fff; border: none; border-radius: 4px;
+            font-size: 14px; text-decoration: none; cursor: pointer;
         }
-        #login-hint a:hover { background: #106ebe; }
         #login-hint .dismiss {
-            display: inline-block;
-            margin-top: 8px;
-            margin-left: 12px;
-            padding: 8px 16px;
-            background: transparent;
-            color: #666;
-            border: 1px solid #ccc;
-            border-radius: 4px;
-            font-size: 13px;
-            text-decoration: none;
-            cursor: pointer;
+            display: inline-block; margin-top: 8px; margin-left: 12px;
+            padding: 8px 16px; background: transparent; color: #999;
+            border: 1px solid #555; border-radius: 4px; font-size: 13px;
+            text-decoration: none; cursor: pointer;
         }
     </style>
 </head>
 <body>
-    <!-- Kalender-iFrame (nur auf Windows Desktop) -->
+    <!-- Windows Desktop: Kalender-iFrame -->
     <iframe id="content" sandbox="allow-scripts allow-same-origin allow-forms" style="display:none;"></iframe>
 
-    <!-- Nicht-Windows: Kalender im Browser öffnen -->
-    <div id="mobile-hint">
+    <!-- Nicht-Windows: Buttons zum Öffnen im Browser -->
+    <div id="non-win">
         <div class="title">vfm Today Kalender</div>
-        <div id="mobile-status" style="font-size:14px;color:#999;">Wird geladen…</div>
-        <a class="open-btn" id="open-browser-btn" href="https://vfmtoday.vfm.de/kalender" target="_blank" style="display:none;">Kalender im Browser öffnen</a>
-        <div id="mobile-info" style="margin-top:8px;font-size:13px;color:#666;display:none;">Der Kalender wird automatisch im Browser geöffnet.<br>Falls nicht, bitte den Button oben klicken.</div>
+        <a class="btn" href="https://vfmtoday.vfm.de/kalender" target="_blank"
+           id="open-btn">Kalender im Browser öffnen</a>
+        <div class="sub">Öffnet den Kalender in Safari / Chrome</div>
     </div>
 
-    <!-- Sofort: Auf Nicht-Windows die Buttons zeigen (kein Warten auf SDK) -->
+    <!-- Sofort: Auf Nicht-Windows die Buttons zeigen -->
     <script>
         if (_isNonWindows) {
-            document.getElementById('mobile-hint').style.display = 'flex';
+            document.getElementById('non-win').style.display = 'flex';
         }
     </script>
 
-    <!-- Desktop: Anmelde-Hinweis (nur bei Bedarf sichtbar) -->
+    <!-- Desktop: Anmelde-Hinweis -->
     <div id="login-hint">
         <div>Falls der Kalender nicht angezeigt wird, bitte einmalig anmelden:</div>
         <a id="login-btn" href="#" target="_blank">Anmelden</a>
@@ -119,35 +76,50 @@
     <script src="https://res.cdn.office.net/teams-js/2.24.0/js/MicrosoftTeams.min.js"></script>
     <script>
         (function () {
-            var RELOAD_INTERVAL_MS = 60 * 60 * 1000; // 1 Stunde
-            var TARGET_URL  = 'https://vfmtoday.vfm.de/kalender';
-            var HINT_DELAY  = 4000; // Nach 4s Hinweis zeigen
+            var TARGET_URL = 'https://vfmtoday.vfm.de/kalender';
+            var RELOAD_MS  = 60 * 60 * 1000;
+            var HINT_DELAY = 4000;
 
-            var iframe      = document.getElementById('content');
-            var loginHint   = document.getElementById('login-hint');
-            var loginBtn    = document.getElementById('login-btn');
-            var dismissBtn  = document.getElementById('dismiss-btn');
-            var mobileHint     = document.getElementById('mobile-hint');
-            var mobileStatus   = document.getElementById('mobile-status');
-            var mobileInfo     = document.getElementById('mobile-info');
-            var openBrowserBtn = document.getElementById('open-browser-btn');
-            var hintTimer      = null;
+            var iframe     = document.getElementById('content');
+            var loginHint  = document.getElementById('login-hint');
+            var loginBtn   = document.getElementById('login-btn');
+            var dismissBtn = document.getElementById('dismiss-btn');
+            var openBtn    = document.getElementById('open-btn');
+            var hintTimer  = null;
+            var sdkReady   = false;
+            var notified   = false;
+
+            /** NotifySuccess einmalig aufrufen, damit Teams den Spinner entfernt */
+            function ensureNotify() {
+                if (notified) return;
+                notified = true;
+                try { microsoftTeams.app.notifySuccess(); } catch (e) {}
+            }
 
             /** Kalender im iframe laden */
             function loadKalender() {
                 iframe.src = TARGET_URL + '?_t=' + Date.now();
             }
 
-            /** iframe load-Event: Hinweis ausblenden */
-            iframe.addEventListener('load', function () {
-                if (hintTimer) {
-                    clearTimeout(hintTimer);
-                    hintTimer = null;
+            // ── Sicherheits-Timeout: notifySuccess nach 2s erzwingen ──
+            setTimeout(ensureNotify, 2000);
+
+            // ── Nicht-Windows: Button-Klick ──
+            openBtn.addEventListener('click', function (e) {
+                // Versuche zuerst app.openLink (öffnet im System-Browser)
+                if (sdkReady) {
+                    e.preventDefault();
+                    microsoftTeams.app.openLink(TARGET_URL);
                 }
+                // Sonst: normaler <a href target=_blank> Fallback
+            });
+
+            // ── Windows: iframe Events / Buttons ──
+            iframe.addEventListener('load', function () {
+                if (hintTimer) { clearTimeout(hintTimer); hintTimer = null; }
                 loginHint.style.display = 'none';
             });
 
-            /** Anmelden-Button: Öffnet Kalender in neuem Tab */
             loginBtn.addEventListener('click', function (e) {
                 e.preventDefault();
                 window.open(TARGET_URL, '_blank');
@@ -161,62 +133,34 @@
                 });
             });
 
-            /** Ausblenden-Button */
             dismissBtn.addEventListener('click', function (e) {
                 e.preventDefault();
                 loginHint.style.display = 'none';
             });
 
-            // Automatisches Neuladen alle 1 Stunde
+            // ── Windows: Auto-Reload ──
             setInterval(function () {
-                iframe.src = TARGET_URL + '?_t=' + Date.now();
-            }, RELOAD_INTERVAL_MS);
-
-            // Neuladen wenn der Tab wieder sichtbar wird
+                if (!_isNonWindows) loadKalender();
+            }, RELOAD_MS);
             document.addEventListener('visibilitychange', function () {
-                if (document.visibilityState === 'visible') {
-                    iframe.src = TARGET_URL + '?_t=' + Date.now();
-                }
+                if (!_isNonWindows && document.visibilityState === 'visible') loadKalender();
             });
 
-            // Button-Klick verdrahten
-            openBrowserBtn.addEventListener('click', function (e) {
-                e.preventDefault();
-                if (_sdkReady) {
-                    microsoftTeams.app.openLink(TARGET_URL);
-                } else {
-                    window.open(TARGET_URL, '_blank');
-                }
-            });
-
-            // Teams SDK initialisieren
+            // ── SDK initialisieren ──
             microsoftTeams.app.initialize().then(function () {
-                _sdkReady = true;
-                microsoftTeams.app.notifySuccess();
+                sdkReady = true;
+                ensureNotify();
 
-                if (_isNonWindows) {
-                    // Nicht-Windows: automatisch im System-Browser öffnen
-                    mobileStatus.style.display = 'none';
-                    openBrowserBtn.style.display = 'inline-block';
-                    mobileInfo.style.display = 'block';
-                    microsoftTeams.app.openLink(TARGET_URL);
-                } else {
-                    // Windows Desktop: Kalender im iframe laden
+                if (!_isNonWindows) {
                     iframe.style.display = 'block';
                     loadKalender();
-
                     hintTimer = setTimeout(function () {
                         loginHint.style.display = 'block';
                     }, HINT_DELAY);
                 }
             }).catch(function (err) {
-                console.warn('Teams SDK init failed:', err);
-                // Fallback: Button anzeigen mit direktem Link
-                mobileStatus.textContent = 'Teams SDK nicht verfügbar.';
-                openBrowserBtn.style.display = 'inline-block';
-                if (!_isNonWindows) {
-                    mobileHint.style.display = 'flex';
-                }
+                console.warn('Teams SDK init error:', err);
+                ensureNotify();
             });
         })();
     </script>
