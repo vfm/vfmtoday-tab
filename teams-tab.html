@@ -134,11 +134,30 @@
                 }
             });
 
-            // Teams SDK initialisieren, dann Kalender direkt laden
+            // Teams SDK initialisieren, dann plattformabhängig laden
             microsoftTeams.app.initialize().then(function () {
                 microsoftTeams.app.notifySuccess();
 
-                // Kalender sofort im iframe laden
+                // Plattform ermitteln
+                return microsoftTeams.app.getContext();
+            }).then(function (context) {
+                var clientType = context.app.host.clientType;
+
+                // Mobile (iOS, Android, iPadOS): Direkt weiterleiten
+                // Kein iframe nötig – Entra-Auth funktioniert im Top-Level-WebView
+                if (clientType === 'android' || clientType === 'ios' || clientType === 'ipados') {
+                    window.location.href = TARGET_URL;
+                    return;
+                }
+
+                // macOS erkennen (clientType ist bei macOS auch 'desktop')
+                var isMac = /Macintosh|Mac OS X/i.test(navigator.userAgent);
+                if (isMac) {
+                    window.location.href = TARGET_URL;
+                    return;
+                }
+
+                // Desktop (Windows): iframe verwenden (Cookies via Edge geteilt)
                 loadKalender();
 
                 // Nach 4 Sekunden: Falls der iframe leer/blockiert ist,
