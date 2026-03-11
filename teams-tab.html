@@ -94,11 +94,11 @@
     <!-- Kalender-iFrame (nur auf Windows Desktop) -->
     <iframe id="content" sandbox="allow-scripts allow-same-origin allow-forms" style="display:none;"></iframe>
 
-    <!-- Mobile/macOS: Button zum Öffnen im Browser -->
+    <!-- Mobile/macOS: Kalender per Dialog oder Browser -->
     <div id="mobile-hint">
         <div class="title">vfm Today Kalender</div>
-        <div>Zum Anzeigen im Browser öffnen:</div>
-        <a class="open-btn" id="open-browser-btn" href="#">Kalender öffnen</a>
+        <a class="open-btn" id="open-dialog-btn" href="#">Kalender anzeigen</a>
+        <div style="margin-top:8px;font-size:13px;color:#666;">oder <a id="open-browser-btn" href="#" style="color:#0078d4;">im Browser öffnen</a></div>
     </div>
 
     <!-- Desktop: Anmelde-Hinweis (nur bei Bedarf sichtbar) -->
@@ -119,9 +119,10 @@
             var loginHint   = document.getElementById('login-hint');
             var loginBtn    = document.getElementById('login-btn');
             var dismissBtn  = document.getElementById('dismiss-btn');
-            var mobileHint  = document.getElementById('mobile-hint');
+            var mobileHint     = document.getElementById('mobile-hint');
+            var openDialogBtn  = document.getElementById('open-dialog-btn');
             var openBrowserBtn = document.getElementById('open-browser-btn');
-            var hintTimer   = null;
+            var hintTimer      = null;
 
             /** Kalender im iframe laden */
             function loadKalender() {
@@ -174,9 +175,25 @@
                 microsoftTeams.app.notifySuccess();
 
                 if (_isMobileOrMac) {
-                    // Mobile / macOS: Button anzeigen, Kalender im System-Browser öffnen
+                    // Mobile / macOS: Kalender als Dialog innerhalb von Teams öffnen
                     mobileHint.style.display = 'flex';
 
+                    openDialogBtn.addEventListener('click', function (e) {
+                        e.preventDefault();
+                        // dialog.url.open() öffnet auf Mobile eine vollseitige WebView
+                        // (kein iframe) → Entra-Login funktioniert dort
+                        if (microsoftTeams.dialog && microsoftTeams.dialog.url &&
+                            microsoftTeams.dialog.url.isSupported && microsoftTeams.dialog.url.isSupported()) {
+                            microsoftTeams.dialog.url.open(
+                                { url: TARGET_URL, title: 'vfm Today Kalender', size: { height: 1000, width: 1000 } }
+                            );
+                        } else {
+                            // Fallback: im System-Browser öffnen
+                            microsoftTeams.app.openLink(TARGET_URL);
+                        }
+                    });
+
+                    // Fallback-Link: im Browser öffnen
                     openBrowserBtn.addEventListener('click', function (e) {
                         e.preventDefault();
                         microsoftTeams.app.openLink(TARGET_URL);
