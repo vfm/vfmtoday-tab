@@ -4,163 +4,178 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>vfm Today</title>
-    <script>
-        // Nur Windows Desktop nutzt den iframe (WebView2 teilt Edge-Cookies).
-        var _isNonWindows = !/Windows NT/i.test(navigator.userAgent || '');
-    </script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         html, body { width: 100%; height: 100%; overflow: hidden;
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             color: #c8c6c4; background: #1f1f1f; }
-        iframe { width: 100%; height: 100%; border: none; display: block; }
-        #non-win {
-            display: none; flex-direction: column; justify-content: center;
-            align-items: center; width: 100%; height: 100%; gap: 20px; padding: 24px;
-            text-align: center;
+        iframe { width: 100%; height: 100%; border: none; }
+        #status {
+            display: flex; flex-direction: column; justify-content: center;
+            align-items: center; width: 100%; height: 100%; gap: 16px;
+            padding: 24px; text-align: center;
         }
-        #non-win .title { font-size: 20px; font-weight: 600; color: #e1dfdd; }
-        #non-win .btn {
-            display: inline-block; padding: 14px 36px; background: #0078d4;
+        #status .title { font-size: 20px; font-weight: 600; color: #e1dfdd; }
+        #status .msg { font-size: 14px; color: #999; }
+        #status .error { color: #f85149; }
+        #status .btn {
+            display: none; padding: 12px 32px; background: #0078d4;
             color: #fff; border: none; border-radius: 6px; font-size: 16px;
             text-decoration: none; cursor: pointer;
         }
-        #non-win .btn:hover { background: #106ebe; }
-        #non-win .sub { font-size: 13px; color: #999; }
-        #non-win .sub a { color: #4da3e0; }
-        #login-hint {
-            display: none; position: fixed; bottom: 24px; left: 50%;
-            transform: translateX(-50%); background: #292929; border: 1px solid #3b3b3b;
-            border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,.3);
-            padding: 16px 24px; text-align: center; z-index: 100; max-width: 400px;
-        }
-        #login-hint a {
-            display: inline-block; margin-top: 8px; padding: 8px 24px;
-            background: #0078d4; color: #fff; border: none; border-radius: 4px;
+        #status .btn:hover { background: #106ebe; }
+        #status .btn-secondary {
+            display: none; padding: 10px 24px; background: transparent;
+            color: #0078d4; border: 1px solid #0078d4; border-radius: 6px;
             font-size: 14px; text-decoration: none; cursor: pointer;
         }
-        #login-hint .dismiss {
-            display: inline-block; margin-top: 8px; margin-left: 12px;
-            padding: 8px 16px; background: transparent; color: #999;
-            border: 1px solid #555; border-radius: 4px; font-size: 13px;
-            text-decoration: none; cursor: pointer;
-        }
+        #status .debug { font-size: 11px; color: #666; max-width: 90%; word-break: break-all; }
     </style>
 </head>
 <body>
-    <!-- Windows Desktop: Kalender-iFrame -->
-    <iframe id="content" sandbox="allow-scripts allow-same-origin allow-forms" style="display:none;"></iframe>
-
-    <!-- Nicht-Windows: Buttons zum Öffnen im Browser -->
-    <div id="non-win">
+    <!-- Status-Anzeige während Authentifizierung -->
+    <div id="status">
         <div class="title">vfm Today Kalender</div>
-        <a class="btn" href="https://vfmtoday.vfm.de/kalender" target="_blank"
-           id="open-btn">Kalender im Browser öffnen</a>
-        <div class="sub">Öffnet den Kalender in Safari / Chrome</div>
+        <div class="msg" id="status-msg">Authentifizierung läuft…</div>
+        <a class="btn" id="retry-btn" href="#">Erneut versuchen</a>
+        <a class="btn-secondary" id="browser-btn" href="#">Im Browser öffnen</a>
+        <div class="debug" id="debug-msg"></div>
     </div>
 
-    <!-- Sofort: Auf Nicht-Windows die Buttons zeigen -->
-    <script>
-        if (_isNonWindows) {
-            document.getElementById('non-win').style.display = 'flex';
-        }
-    </script>
-
-    <!-- Desktop: Anmelde-Hinweis -->
-    <div id="login-hint">
-        <div>Falls der Kalender nicht angezeigt wird, bitte einmalig anmelden:</div>
-        <a id="login-btn" href="#" target="_blank">Anmelden</a>
-        <a class="dismiss" id="dismiss-btn" href="#">Ausblenden</a>
-    </div>
+    <!-- Kalender-iFrame (wird nach erfolgreicher Auth sichtbar) -->
+    <iframe id="content" style="display:none;"></iframe>
 
     <script src="https://res.cdn.office.net/teams-js/2.24.0/js/MicrosoftTeams.min.js"></script>
     <script>
         (function () {
-            var TARGET_URL = 'https://vfmtoday.vfm.de/kalender';
-            var RELOAD_MS  = 60 * 60 * 1000;
-            var HINT_DELAY = 4000;
+            // ── Konfiguration ──────────────────────────────────────────
+            var PROXY_BASE = 'https://vfmtoday-proxy.azurewebsites.net';
+            var CALENDAR_URL = 'https://vfmtoday.vfm.de/kalender';
+            var RELOAD_MS  = 60 * 60 * 1000; // 1 Stunde
 
             var iframe     = document.getElementById('content');
-            var loginHint  = document.getElementById('login-hint');
-            var loginBtn   = document.getElementById('login-btn');
-            var dismissBtn = document.getElementById('dismiss-btn');
-            var openBtn    = document.getElementById('open-btn');
-            var hintTimer  = null;
-            var sdkReady   = false;
+            var statusDiv  = document.getElementById('status');
+            var statusMsg  = document.getElementById('status-msg');
+            var retryBtn   = document.getElementById('retry-btn');
+            var browserBtn = document.getElementById('browser-btn');
+            var debugMsg   = document.getElementById('debug-msg');
             var notified   = false;
 
-            /** NotifySuccess einmalig aufrufen, damit Teams den Spinner entfernt */
             function ensureNotify() {
                 if (notified) return;
                 notified = true;
                 try { microsoftTeams.app.notifySuccess(); } catch (e) {}
             }
 
-            /** Kalender im iframe laden */
-            function loadKalender() {
-                iframe.src = TARGET_URL + '?_t=' + Date.now();
+            function debug(msg) {
+                console.log('[vfmtoday] ' + msg);
+                debugMsg.textContent = msg;
             }
 
-            // ── Sicherheits-Timeout: notifySuccess nach 2s erzwingen ──
+            function showError(msg) {
+                statusMsg.textContent = msg;
+                statusMsg.classList.add('error');
+                retryBtn.style.display = 'inline-block';
+                browserBtn.style.display = 'inline-block';
+            }
+
+            function showStatus(msg) {
+                statusMsg.textContent = msg;
+                statusMsg.classList.remove('error');
+            }
+
+            /** Fallback: im System-Browser öffnen */
+            function openInBrowser() {
+                try {
+                    microsoftTeams.app.openLink(CALENDAR_URL);
+                } catch (e) {
+                    window.open(CALENDAR_URL, '_blank');
+                }
+            }
+
+            /**
+             * Holt SSO-Token, tauscht es gegen eine Proxy-Session,
+             * und lädt den Kalender direkt als iframe.src über den Proxy.
+             */
+            function loadViaProxy() {
+                showStatus('Authentifizierung läuft…');
+                retryBtn.style.display = 'none';
+                browserBtn.style.display = 'none';
+                debug('getAuthToken...');
+
+                microsoftTeams.authentication.getAuthToken().then(function (token) {
+                    if (!token) throw new Error('SSO-Token ist leer');
+                    debug('Token erhalten, erstelle Session...');
+                    showStatus('Kalender wird geladen…');
+
+                    return fetch(PROXY_BASE + '/_auth', {
+                        method: 'GET',
+                        headers: { 'Authorization': 'Bearer ' + token },
+                    });
+                }).then(function (resp) {
+                    debug('Auth-Endpunkt Status: ' + resp.status);
+                    if (!resp.ok) {
+                        return resp.text().then(function (txt) {
+                            var errMsg = 'HTTP ' + resp.status;
+                            try { errMsg = JSON.parse(txt).error || errMsg; } catch(e) {}
+                            throw new Error(errMsg);
+                        });
+                    }
+                    return resp.json();
+                }).then(function (data) {
+                    var sid = data.s;
+                    if (!sid) throw new Error('Keine Session-ID erhalten');
+                    debug('Session: ' + sid);
+                    statusDiv.style.display = 'none';
+                    iframe.style.display = 'block';
+                    iframe.src = PROXY_BASE + '/kalender?s=' + sid;
+                    ensureNotify();
+                }).catch(function (err) {
+                    console.error('Proxy load failed:', err);
+                    debug('Fehler: ' + (err.message || JSON.stringify(err)));
+                    showError('Fehler: ' + (err.message || err));
+                });
+            }
+
+            // Retry-Button
+            retryBtn.addEventListener('click', function (e) {
+                e.preventDefault();
+                loadViaProxy();
+            });
+
+            // Browser-Fallback-Button
+            browserBtn.addEventListener('click', function (e) {
+                e.preventDefault();
+                openInBrowser();
+            });
+
+            // Auto-Reload (stündlich)
+            setInterval(function () {
+                if (iframe.style.display !== 'none' && iframe.src) {
+                    loadViaProxy();
+                }
+            }, RELOAD_MS);
+
+            // Bei Tab-Wechsel neu laden
+            document.addEventListener('visibilitychange', function () {
+                if (document.visibilityState === 'visible' && iframe.style.display !== 'none' && iframe.src) {
+                    loadViaProxy();
+                }
+            });
+
+            // Sicherheits-Timeout: notifySuccess nach 2s
             setTimeout(ensureNotify, 2000);
 
-            // ── Nicht-Windows: Button-Klick ──
-            openBtn.addEventListener('click', function (e) {
-                // Versuche zuerst app.openLink (öffnet im System-Browser)
-                if (sdkReady) {
-                    e.preventDefault();
-                    microsoftTeams.app.openLink(TARGET_URL);
-                }
-                // Sonst: normaler <a href target=_blank> Fallback
-            });
-
-            // ── Windows: iframe Events / Buttons ──
-            iframe.addEventListener('load', function () {
-                if (hintTimer) { clearTimeout(hintTimer); hintTimer = null; }
-                loginHint.style.display = 'none';
-            });
-
-            loginBtn.addEventListener('click', function (e) {
-                e.preventDefault();
-                window.open(TARGET_URL, '_blank');
-                loginHint.innerHTML =
-                    '<div>Nach der Anmeldung hier klicken:</div>' +
-                    '<a href="#" id="reload-btn" style="display:inline-block;margin-top:8px;padding:8px 24px;background:#0078d4;color:#fff;border:none;border-radius:4px;font-size:14px;text-decoration:none;cursor:pointer;">Kalender neu laden</a>';
-                document.getElementById('reload-btn').addEventListener('click', function (ev) {
-                    ev.preventDefault();
-                    loginHint.style.display = 'none';
-                    loadKalender();
-                });
-            });
-
-            dismissBtn.addEventListener('click', function (e) {
-                e.preventDefault();
-                loginHint.style.display = 'none';
-            });
-
-            // ── Windows: Auto-Reload ──
-            setInterval(function () {
-                if (!_isNonWindows) loadKalender();
-            }, RELOAD_MS);
-            document.addEventListener('visibilitychange', function () {
-                if (!_isNonWindows && document.visibilityState === 'visible') loadKalender();
-            });
-
-            // ── SDK initialisieren ──
+            // ── SDK initialisieren → Proxy laden (alle Plattformen) ────
+            debug('SDK initialize...');
             microsoftTeams.app.initialize().then(function () {
-                sdkReady = true;
+                debug('SDK bereit');
                 ensureNotify();
-
-                if (!_isNonWindows) {
-                    iframe.style.display = 'block';
-                    loadKalender();
-                    hintTimer = setTimeout(function () {
-                        loginHint.style.display = 'block';
-                    }, HINT_DELAY);
-                }
+                loadViaProxy();
             }).catch(function (err) {
-                console.warn('Teams SDK init error:', err);
+                debug('SDK Fehler: ' + (err.message || err));
                 ensureNotify();
+                showError('Teams SDK Fehler: ' + (err.message || err));
             });
         })();
     </script>
