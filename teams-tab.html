@@ -94,11 +94,12 @@
     <!-- Kalender-iFrame (nur auf Windows Desktop) -->
     <iframe id="content" sandbox="allow-scripts allow-same-origin allow-forms" style="display:none;"></iframe>
 
-    <!-- Mobile/macOS: Kalender per Dialog oder Browser -->
+    <!-- Nicht-Windows: Kalender im Browser öffnen -->
     <div id="mobile-hint">
         <div class="title">vfm Today Kalender</div>
-        <a class="open-btn" id="open-dialog-btn" href="#">Kalender anzeigen</a>
-        <div style="margin-top:8px;font-size:13px;color:#666;">oder <a id="open-browser-btn" href="https://vfmtoday.vfm.de/kalender" target="_blank" style="color:#0078d4;">im Browser öffnen</a></div>
+        <div id="mobile-status" style="font-size:14px;color:#999;">Wird geladen…</div>
+        <a class="open-btn" id="open-browser-btn" href="https://vfmtoday.vfm.de/kalender" target="_blank" style="display:none;">Kalender im Browser öffnen</a>
+        <div id="mobile-info" style="margin-top:8px;font-size:13px;color:#666;display:none;">Der Kalender wird automatisch im Browser geöffnet.<br>Falls nicht, bitte den Button oben klicken.</div>
     </div>
 
     <!-- Sofort: Auf Nicht-Windows die Buttons zeigen (kein Warten auf SDK) -->
@@ -127,7 +128,8 @@
             var loginBtn    = document.getElementById('login-btn');
             var dismissBtn  = document.getElementById('dismiss-btn');
             var mobileHint     = document.getElementById('mobile-hint');
-            var openDialogBtn  = document.getElementById('open-dialog-btn');
+            var mobileStatus   = document.getElementById('mobile-status');
+            var mobileInfo     = document.getElementById('mobile-info');
             var openBrowserBtn = document.getElementById('open-browser-btn');
             var hintTimer      = null;
 
@@ -177,23 +179,7 @@
                 }
             });
 
-            // Button-Klick sofort verdrahten (funktioniert auch ohne SDK)
-            var _sdkReady = false;
-
-            openDialogBtn.addEventListener('click', function (e) {
-                e.preventDefault();
-                if (_sdkReady && microsoftTeams.dialog && microsoftTeams.dialog.url &&
-                    microsoftTeams.dialog.url.isSupported && microsoftTeams.dialog.url.isSupported()) {
-                    microsoftTeams.dialog.url.open(
-                        { url: TARGET_URL, title: 'vfm Today Kalender', size: { height: 1000, width: 1000 } }
-                    );
-                } else if (_sdkReady) {
-                    microsoftTeams.app.openLink(TARGET_URL);
-                } else {
-                    window.open(TARGET_URL, '_blank');
-                }
-            });
-
+            // Button-Klick verdrahten
             openBrowserBtn.addEventListener('click', function (e) {
                 e.preventDefault();
                 if (_sdkReady) {
@@ -208,7 +194,13 @@
                 _sdkReady = true;
                 microsoftTeams.app.notifySuccess();
 
-                if (!_isNonWindows) {
+                if (_isNonWindows) {
+                    // Nicht-Windows: automatisch im System-Browser öffnen
+                    mobileStatus.style.display = 'none';
+                    openBrowserBtn.style.display = 'inline-block';
+                    mobileInfo.style.display = 'block';
+                    microsoftTeams.app.openLink(TARGET_URL);
+                } else {
                     // Windows Desktop: Kalender im iframe laden
                     iframe.style.display = 'block';
                     loadKalender();
@@ -218,10 +210,11 @@
                     }, HINT_DELAY);
                 }
             }).catch(function (err) {
-                // SDK-Fehler: Buttons sind bereits sichtbar, window.open als Fallback
                 console.warn('Teams SDK init failed:', err);
+                // Fallback: Button anzeigen mit direktem Link
+                mobileStatus.textContent = 'Teams SDK nicht verfügbar.';
+                openBrowserBtn.style.display = 'inline-block';
                 if (!_isNonWindows) {
-                    // Auch auf Windows Fallback zeigen
                     mobileHint.style.display = 'flex';
                 }
             });
