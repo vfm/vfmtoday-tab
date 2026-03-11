@@ -5,9 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>vfm Today</title>
     <script>
-        // Erkennung: Nicht-Windows → Dialog-Ansatz (macOS, iPhone, Android)
+        // Erkennung: Nicht-Windows → Dialog-/Browser-Ansatz (macOS, iPhone, Android)
         // Nur Windows Desktop nutzt den iframe (WebView2 teilt Edge-Cookies).
-        var _isMobile = (function () {
+        var _isNonWindows = (function () {
             var ua = navigator.userAgent || '';
             return !/Windows NT/i.test(ua);
         })();
@@ -98,8 +98,15 @@
     <div id="mobile-hint">
         <div class="title">vfm Today Kalender</div>
         <a class="open-btn" id="open-dialog-btn" href="#">Kalender anzeigen</a>
-        <div style="margin-top:8px;font-size:13px;color:#666;">oder <a id="open-browser-btn" href="#" style="color:#0078d4;">im Browser öffnen</a></div>
+        <div style="margin-top:8px;font-size:13px;color:#666;">oder <a id="open-browser-btn" href="https://vfmtoday.vfm.de/kalender" target="_blank" style="color:#0078d4;">im Browser öffnen</a></div>
     </div>
+
+    <!-- Sofort: Auf Nicht-Windows die Buttons zeigen (kein Warten auf SDK) -->
+    <script>
+        if (_isNonWindows) {
+            document.getElementById('mobile-hint').style.display = 'flex';
+        }
+    </script>
 
     <!-- Desktop: Anmelde-Hinweis (nur bei Bedarf sichtbar) -->
     <div id="login-hint">
@@ -170,35 +177,38 @@
                 }
             });
 
+            // Button-Klick sofort verdrahten (funktioniert auch ohne SDK)
+            var _sdkReady = false;
+
+            openDialogBtn.addEventListener('click', function (e) {
+                e.preventDefault();
+                if (_sdkReady && microsoftTeams.dialog && microsoftTeams.dialog.url &&
+                    microsoftTeams.dialog.url.isSupported && microsoftTeams.dialog.url.isSupported()) {
+                    microsoftTeams.dialog.url.open(
+                        { url: TARGET_URL, title: 'vfm Today Kalender', size: { height: 1000, width: 1000 } }
+                    );
+                } else if (_sdkReady) {
+                    microsoftTeams.app.openLink(TARGET_URL);
+                } else {
+                    window.open(TARGET_URL, '_blank');
+                }
+            });
+
+            openBrowserBtn.addEventListener('click', function (e) {
+                e.preventDefault();
+                if (_sdkReady) {
+                    microsoftTeams.app.openLink(TARGET_URL);
+                } else {
+                    window.open(TARGET_URL, '_blank');
+                }
+            });
+
             // Teams SDK initialisieren
             microsoftTeams.app.initialize().then(function () {
+                _sdkReady = true;
                 microsoftTeams.app.notifySuccess();
 
-                if (_isMobile) {
-                    // Mobile / macOS: Kalender als Dialog innerhalb von Teams öffnen
-                    mobileHint.style.display = 'flex';
-
-                    openDialogBtn.addEventListener('click', function (e) {
-                        e.preventDefault();
-                        // dialog.url.open() öffnet auf Mobile eine vollseitige WebView
-                        // (kein iframe) → Entra-Login funktioniert dort
-                        if (microsoftTeams.dialog && microsoftTeams.dialog.url &&
-                            microsoftTeams.dialog.url.isSupported && microsoftTeams.dialog.url.isSupported()) {
-                            microsoftTeams.dialog.url.open(
-                                { url: TARGET_URL, title: 'vfm Today Kalender', size: { height: 1000, width: 1000 } }
-                            );
-                        } else {
-                            // Fallback: im System-Browser öffnen
-                            microsoftTeams.app.openLink(TARGET_URL);
-                        }
-                    });
-
-                    // Fallback-Link: im Browser öffnen
-                    openBrowserBtn.addEventListener('click', function (e) {
-                        e.preventDefault();
-                        microsoftTeams.app.openLink(TARGET_URL);
-                    });
-                } else {
+                if (!_isNonWindows) {
                     // Windows Desktop: Kalender im iframe laden
                     iframe.style.display = 'block';
                     loadKalender();
@@ -206,6 +216,13 @@
                     hintTimer = setTimeout(function () {
                         loginHint.style.display = 'block';
                     }, HINT_DELAY);
+                }
+            }).catch(function (err) {
+                // SDK-Fehler: Buttons sind bereits sichtbar, window.open als Fallback
+                console.warn('Teams SDK init failed:', err);
+                if (!_isNonWindows) {
+                    // Auch auf Windows Fallback zeigen
+                    mobileHint.style.display = 'flex';
                 }
             });
         })();
