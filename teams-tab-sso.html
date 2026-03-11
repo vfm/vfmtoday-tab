@@ -24,6 +24,12 @@
             text-decoration: none; cursor: pointer;
         }
         #status .btn:hover { background: #106ebe; }
+        #status .btn-secondary {
+            display: none; padding: 10px 24px; background: transparent;
+            color: #0078d4; border: 1px solid #0078d4; border-radius: 6px;
+            font-size: 14px; text-decoration: none; cursor: pointer;
+        }
+        #status .debug { font-size: 11px; color: #666; max-width: 90%; word-break: break-all; }
     </style>
 </head>
 <body>
@@ -32,6 +38,8 @@
         <div class="title">vfm Today Kalender</div>
         <div class="msg" id="status-msg">Authentifizierung läuft…</div>
         <a class="btn" id="retry-btn" href="#">Erneut versuchen</a>
+        <a class="btn-secondary" id="browser-btn" href="#">Im Browser öffnen</a>
+        <div class="debug" id="debug-msg"></div>
     </div>
 
     <!-- Kalender-iFrame (wird nach erfolgreicher Auth sichtbar) -->
@@ -41,15 +49,17 @@
     <script>
         (function () {
             // ── Konfiguration ──────────────────────────────────────────
-            // NACH DEPLOYMENT: URL der Azure Function eintragen
             var PROXY_BASE = 'https://vfmtoday-proxy.azurewebsites.net/api/proxy';
+            var CALENDAR_URL = 'https://vfmtoday.vfm.de/kalender';
             var RELOAD_MS  = 60 * 60 * 1000; // 1 Stunde
 
-            var iframe    = document.getElementById('content');
-            var statusDiv = document.getElementById('status');
-            var statusMsg = document.getElementById('status-msg');
-            var retryBtn  = document.getElementById('retry-btn');
-            var notified  = false;
+            var iframe     = document.getElementById('content');
+            var statusDiv  = document.getElementById('status');
+            var statusMsg  = document.getElementById('status-msg');
+            var retryBtn   = document.getElementById('retry-btn');
+            var browserBtn = document.getElementById('browser-btn');
+            var debugMsg   = document.getElementById('debug-msg');
+            var notified   = false;
 
             function ensureNotify() {
                 if (notified) return;
@@ -57,10 +67,16 @@
                 try { microsoftTeams.app.notifySuccess(); } catch (e) {}
             }
 
+            function debug(msg) {
+                console.log('[vfmtoday] ' + msg);
+                debugMsg.textContent = msg;
+            }
+
             function showError(msg) {
                 statusMsg.textContent = msg;
                 statusMsg.classList.add('error');
                 retryBtn.style.display = 'inline-block';
+                browserBtn.style.display = 'inline-block';
             }
 
             function showStatus(msg) {
@@ -68,12 +84,24 @@
                 statusMsg.classList.remove('error');
             }
 
+            /** Fallback: im System-Browser öffnen */
+            function openInBrowser() {
+                try {
+                    microsoftTeams.app.openLink(CALENDAR_URL);
+                } catch (e) {
+                    window.open(CALENDAR_URL, '_blank');
+                }
+            }
+
             /** Holt SSO-Token und lädt Kalender über den Proxy */
             function loadViaProxy() {
                 showStatus('Authentifizierung läuft…');
                 retryBtn.style.display = 'none';
+                browserBtn.style.display = 'none';
+                debug('getAuthToken...');
 
                 microsoftTeams.authentication.getAuthToken().then(function (token) {
+                    debug('Token erhalten, lade Proxy...');
                     showStatus('Kalender wird geladen…');
 
                     return fetch(PROXY_BASE, {
@@ -83,19 +111,24 @@
                         },
                     });
                 }).then(function (resp) {
+                    debug('Proxy Status: ' + resp.status);
                     if (!resp.ok) {
-                        return resp.json().then(function (err) {
-                            throw new Error(err.error || 'HTTP ' + resp.status);
+                        return resp.text().then(function (txt) {
+                            var errMsg = 'HTTP ' + resp.status;
+                            try { errMsg = JSON.parse(txt).error || errMsg; } catch(e) {}
+                            throw new Error(errMsg);
                         });
                     }
                     return resp.text();
                 }).then(function (html) {
+                    debug('HTML empfangen: ' + html.length + ' Zeichen');
                     // HTML in den iframe schreiben
                     statusDiv.style.display = 'none';
                     iframe.style.display = 'block';
                     iframe.srcdoc = html;
                 }).catch(function (err) {
                     console.error('Proxy load failed:', err);
+                    debug('Fehler: ' + (err.message || JSON.stringify(err)));
                     showError('Fehler: ' + (err.message || err));
                 });
             }
@@ -104,6 +137,12 @@
             retryBtn.addEventListener('click', function (e) {
                 e.preventDefault();
                 loadViaProxy();
+            });
+
+            // Browser-Fallback-Button
+            browserBtn.addEventListener('click', function (e) {
+                e.preventDefault();
+                openInBrowser();
             });
 
             // Auto-Reload
@@ -123,10 +162,13 @@
             setTimeout(ensureNotify, 2000);
 
             // ── SDK initialisieren und Kalender laden ──────────────────
+            debug('SDK initialize...');
             microsoftTeams.app.initialize().then(function () {
+                debug('SDK bereit');
                 ensureNotify();
                 loadViaProxy();
             }).catch(function (err) {
+                debug('SDK Fehler: ' + (err.message || err));
                 ensureNotify();
                 showError('Teams SDK Fehler: ' + (err.message || err));
             });
