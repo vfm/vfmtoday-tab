@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>vfm Today</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html, body { width: 100%; height: 100%; overflow: hidden;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            color: #c8c6c4; background: #1f1f1f; }
+        iframe { width: 100%; height: 100%; border: none; }
+        #status {
+            display: flex; flex-direction: column; justify-content: center;
+            align-items: center; width: 100%; height: 100%; gap: 16px;
+            padding: 24px; text-align: center;
+        }
+        #status .title { font-size: 20px; font-weight: 600; color: #e1dfdd; }
+        #status .msg { font-size: 14px; color: #999; }
+        #status .error { color: #f85149; }
+        #status .btn {
+            display: none; padding: 12px 32px; background: #0078d4;
+            color: #fff; border: none; border-radius: 6px; font-size: 16px;
+            text-decoration: none; cursor: pointer;
+        }
+        #status .btn:hover { background: #106ebe; }
+    </style>
+</head>
+<body>
+    <!-- Status-Anzeige während Authentifizierung -->
+    <div id="status">
+        <div class="title">vfm Today Kalender</div>
+        <div class="msg" id="status-msg">Authentifizierung läuft…</div>
+        <a class="btn" id="retry-btn" href="#">Erneut versuchen</a>
+    </div>
+
+    <!-- Kalender-iFrame (wird nach erfolgreicher Auth sichtbar) -->
+    <iframe id="content" style="display:none;"></iframe>
+
+    <script src="https://res.cdn.office.net/teams-js/2.24.0/js/MicrosoftTeams.min.js"></script>
+    <script>
+        (function () {
+            // ── Konfiguration ──────────────────────────────────────────
+            // NACH DEPLOYMENT: URL der Azure Function eintragen
+            var PROXY_BASE = 'https://vfmtoday-proxy.azurewebsites.net/api/proxy';
+            var RELOAD_MS  = 60 * 60 * 1000; // 1 Stunde
+
+            var iframe    = document.getElementById('content');
+            var statusDiv = document.getElementById('status');
+            var statusMsg = document.getElementById('status-msg');
+            var retryBtn  = document.getElementById('retry-btn');
+            var notified  = false;
+
+            function ensureNotify() {
+                if (notified) return;
+                notified = true;
+                try { microsoftTeams.app.notifySuccess(); } catch (e) {}
+            }
+
+            function showError(msg) {
+                statusMsg.textContent = msg;
+                statusMsg.classList.add('error');
+                retryBtn.style.display = 'inline-block';
+            }
+
+            function showStatus(msg) {
+                statusMsg.textContent = msg;
+                statusMsg.classList.remove('error');
+            }
+
+            /** Holt SSO-Token und lädt Kalender über den Proxy */
+            function loadViaProxy() {
+                showStatus('Authentifizierung läuft…');
+                retryBtn.style.display = 'none';
+
+                microsoftTeams.authentication.getAuthToken().then(function (token) {
+                    showStatus('Kalender wird geladen…');
+
+                    return fetch(PROXY_BASE, {
+                        method: 'GET',
+                        headers: {
+                            'Authorization': 'Bearer ' + token,
+                        },
+                    });
+                }).then(function (resp) {
+                    if (!resp.ok) {
+                        return resp.json().then(function (err) {
+                            throw new Error(err.error || 'HTTP ' + resp.status);
+                        });
+                    }
+                    return resp.text();
+                }).then(function (html) {
+                    // HTML in den iframe schreiben
+                    statusDiv.style.display = 'none';
+                    iframe.style.display = 'block';
+                    iframe.srcdoc = html;
+                }).catch(function (err) {
+                    console.error('Proxy load failed:', err);
+                    showError('Fehler: ' + (err.message || err));
+                });
+            }
+
+            // Retry-Button
+            retryBtn.addEventListener('click', function (e) {
+                e.preventDefault();
+                loadViaProxy();
+            });
+
+            // Auto-Reload
+            setInterval(function () {
+                if (iframe.style.display !== 'none') {
+                    loadViaProxy();
+                }
+            }, RELOAD_MS);
+
+            document.addEventListener('visibilitychange', function () {
+                if (document.visibilityState === 'visible' && iframe.style.display !== 'none') {
+                    loadViaProxy();
+                }
+            });
+
+            // Sicherheits-Timeout: notifySuccess nach 2s
+            setTimeout(ensureNotify, 2000);
+
+            // ── SDK initialisieren und Kalender laden ──────────────────
+            microsoftTeams.app.initialize().then(function () {
+                ensureNotify();
+                loadViaProxy();
+            }).catch(function (err) {
+                ensureNotify();
+                showError('Teams SDK Fehler: ' + (err.message || err));
+            });
+        })();
+    </script>
+</body>
+</html>
