@@ -5,24 +5,46 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>vfm Today</title>
     <script>
-        // SOFORT prüfen – BEVOR das Teams SDK oder irgendwas anderes lädt.
-        // Auf allen Plattformen außer Windows Desktop: direkt weiterleiten.
-        // Der Entra Application Proxy kann den Login im Top-Level-Fenster
-        // normal durchführen (kein iframe = kein X-Frame-Options-Problem).
-        (function () {
-            var TARGET = 'https://vfmtoday.vfm.de/kalender';
+        // Sofort-Erkennung: Nicht-Windows-Desktop?
+        // Merken für spätere Behandlung per Teams SDK.
+        var _isMobileOrMac = (function () {
             var ua = navigator.userAgent || '';
-            var isWindowsDesktop = /Windows NT/i.test(ua) && !/Mobile|Mobi/i.test(ua);
-
-            if (!isWindowsDesktop) {
-                window.location.replace(TARGET);
-            }
+            return !/Windows NT/i.test(ua) || /Mobile|Mobi/i.test(ua);
         })();
     </script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         html, body { width: 100%; height: 100%; overflow: hidden; }
         iframe { width: 100%; height: 100%; border: none; display: block; }
+        #mobile-hint {
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            width: 100%;
+            height: 100%;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            color: #323130;
+            text-align: center;
+            gap: 16px;
+            padding: 24px;
+        }
+        #mobile-hint .title {
+            font-size: 18px;
+            font-weight: 600;
+        }
+        #mobile-hint .open-btn {
+            display: inline-block;
+            padding: 12px 32px;
+            background: #0078d4;
+            color: #fff;
+            border: none;
+            border-radius: 6px;
+            font-size: 16px;
+            text-decoration: none;
+            cursor: pointer;
+        }
+        #mobile-hint .open-btn:hover { background: #106ebe; }
         #login-hint {
             display: none;
             position: fixed;
@@ -70,9 +92,16 @@
 </head>
 <body>
     <!-- Kalender-iFrame (nur auf Windows Desktop) -->
-    <iframe id="content" sandbox="allow-scripts allow-same-origin allow-forms"></iframe>
+    <iframe id="content" sandbox="allow-scripts allow-same-origin allow-forms" style="display:none;"></iframe>
 
-    <!-- Anmelde-Hinweis (nur bei Bedarf sichtbar) -->
+    <!-- Mobile/macOS: Button zum Öffnen im Browser -->
+    <div id="mobile-hint">
+        <div class="title">vfm Today Kalender</div>
+        <div>Zum Anzeigen im Browser öffnen:</div>
+        <a class="open-btn" id="open-browser-btn" href="#">Kalender öffnen</a>
+    </div>
+
+    <!-- Desktop: Anmelde-Hinweis (nur bei Bedarf sichtbar) -->
     <div id="login-hint">
         <div>Falls der Kalender nicht angezeigt wird, bitte einmalig anmelden:</div>
         <a id="login-btn" href="#" target="_blank">Anmelden</a>
@@ -86,11 +115,13 @@
             var TARGET_URL  = 'https://vfmtoday.vfm.de/kalender';
             var HINT_DELAY  = 4000; // Nach 4s Hinweis zeigen
 
-            var iframe     = document.getElementById('content');
-            var loginHint  = document.getElementById('login-hint');
-            var loginBtn   = document.getElementById('login-btn');
-            var dismissBtn = document.getElementById('dismiss-btn');
-            var hintTimer  = null;
+            var iframe      = document.getElementById('content');
+            var loginHint   = document.getElementById('login-hint');
+            var loginBtn    = document.getElementById('login-btn');
+            var dismissBtn  = document.getElementById('dismiss-btn');
+            var mobileHint  = document.getElementById('mobile-hint');
+            var openBrowserBtn = document.getElementById('open-browser-btn');
+            var hintTimer   = null;
 
             /** Kalender im iframe laden */
             function loadKalender() {
@@ -138,15 +169,27 @@
                 }
             });
 
-            // Teams SDK initialisieren, dann Kalender laden (nur Windows Desktop)
+            // Teams SDK initialisieren
             microsoftTeams.app.initialize().then(function () {
                 microsoftTeams.app.notifySuccess();
 
-                loadKalender();
+                if (_isMobileOrMac) {
+                    // Mobile / macOS: Button anzeigen, Kalender im System-Browser öffnen
+                    mobileHint.style.display = 'flex';
 
-                hintTimer = setTimeout(function () {
-                    loginHint.style.display = 'block';
-                }, HINT_DELAY);
+                    openBrowserBtn.addEventListener('click', function (e) {
+                        e.preventDefault();
+                        microsoftTeams.app.openLink(TARGET_URL);
+                    });
+                } else {
+                    // Windows Desktop: Kalender im iframe laden
+                    iframe.style.display = 'block';
+                    loadKalender();
+
+                    hintTimer = setTimeout(function () {
+                        loginHint.style.display = 'block';
+                    }, HINT_DELAY);
+                }
             });
         })();
     </script>
