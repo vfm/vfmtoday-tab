@@ -93,7 +93,13 @@
                 }
             }
 
-            /** Holt SSO-Token und lädt Kalender über den Proxy */
+            /**
+             * Holt SSO-Token und lädt Kalender über den Proxy.
+             * Der Proxy liefert HTML mit umgeschriebenen URLs –
+             * alle Sub-Ressourcen (CSS, JS, Bilder) gehen ebenfalls
+             * über den Proxy mit verschlüsseltem Auth-Token.
+             * → Funktioniert auf ALLEN Plattformen.
+             */
             function loadViaProxy() {
                 showStatus('Authentifizierung läuft…');
                 retryBtn.style.display = 'none';
@@ -122,7 +128,6 @@
                     return resp.text();
                 }).then(function (html) {
                     debug('HTML empfangen: ' + html.length + ' Zeichen');
-                    // HTML in den iframe schreiben
                     statusDiv.style.display = 'none';
                     iframe.style.display = 'block';
                     iframe.srcdoc = html;
@@ -145,13 +150,14 @@
                 openInBrowser();
             });
 
-            // Auto-Reload
+            // Auto-Reload (stündlich)
             setInterval(function () {
                 if (iframe.style.display !== 'none') {
                     loadViaProxy();
                 }
             }, RELOAD_MS);
 
+            // Bei Tab-Wechsel neu laden
             document.addEventListener('visibilitychange', function () {
                 if (document.visibilityState === 'visible' && iframe.style.display !== 'none') {
                     loadViaProxy();
@@ -161,60 +167,12 @@
             // Sicherheits-Timeout: notifySuccess nach 2s
             setTimeout(ensureNotify, 2000);
 
-            /** Nicht-Windows: "Im Browser öffnen"-Button zeigen */
-            function showBrowserFallback(platform) {
-                ensureNotify();
-                showStatus('Tippe auf den Button, um den Kalender zu öffnen.');
-                browserBtn.style.display = 'inline-block';
-                browserBtn.textContent = 'Kalender öffnen';
-                // Primär-Style für den Button
-                browserBtn.style.background = '#0078d4';
-                browserBtn.style.color = '#fff';
-                browserBtn.style.border = 'none';
-                browserBtn.style.padding = '12px 32px';
-                browserBtn.style.fontSize = '16px';
-                debug(platform + ' – Browser-Fallback');
-            }
-
-            /**
-             * Plattform-Routing:
-             * - Windows Desktop: SSO Proxy (WebView2 teilt Cookies mit Edge)
-             * - Web-Browser: SSO Proxy (Browser hat Entra Session-Cookie)
-             * - macOS / iOS / Android: Browser-Button (kein Cookie-Sharing)
-             */
-            function routeByPlatform() {
-                microsoftTeams.app.getContext().then(function (context) {
-                    var clientType = context.app.host.clientType || '';
-                    var isWindows = /Windows/i.test(navigator.userAgent);
-                    debug('clientType=' + clientType + ', isWindows=' + isWindows);
-
-                    if (clientType === 'web') {
-                        // Browser-Client: hat wahrscheinlich Entra Session
-                        loadViaProxy();
-                    } else if (clientType === 'desktop' && isWindows) {
-                        // Windows Desktop: WebView2 teilt Cookies mit Edge
-                        loadViaProxy();
-                    } else {
-                        // macOS Desktop, iOS, Android, iPadOS: kein Cookie-Sharing
-                        showBrowserFallback(clientType + (isWindows ? '/Win' : '/nonWin'));
-                    }
-                }).catch(function (err) {
-                    debug('getContext Fehler: ' + err.message);
-                    // Fallback: User-Agent prüfen
-                    if (/Windows/i.test(navigator.userAgent)) {
-                        loadViaProxy();
-                    } else {
-                        showBrowserFallback('UA-fallback');
-                    }
-                });
-            }
-
-            // ── SDK initialisieren und Kalender laden ──────────────────
+            // ── SDK initialisieren → Proxy laden (alle Plattformen) ────
             debug('SDK initialize...');
             microsoftTeams.app.initialize().then(function () {
                 debug('SDK bereit');
                 ensureNotify();
-                routeByPlatform();
+                loadViaProxy();
             }).catch(function (err) {
                 debug('SDK Fehler: ' + (err.message || err));
                 ensureNotify();
