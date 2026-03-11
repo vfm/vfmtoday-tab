@@ -161,14 +161,8 @@
             // Sicherheits-Timeout: notifySuccess nach 2s
             setTimeout(ensureNotify, 2000);
 
-            /** Plattform-Erkennung: Mobile = kein Cookie-Sharing → Browser-Button */
-            function isMobile() {
-                var ua = navigator.userAgent || '';
-                return /iPhone|iPad|iPod|Android/i.test(ua);
-            }
-
-            /** Mobile: Direkt "Im Browser öffnen"-Button zeigen */
-            function showMobileFallback() {
+            /** Nicht-Windows: "Im Browser öffnen"-Button zeigen */
+            function showBrowserFallback(platform) {
                 ensureNotify();
                 showStatus('Tippe auf den Button, um den Kalender zu öffnen.');
                 browserBtn.style.display = 'inline-block';
@@ -179,7 +173,40 @@
                 browserBtn.style.border = 'none';
                 browserBtn.style.padding = '12px 32px';
                 browserBtn.style.fontSize = '16px';
-                debug('Mobile erkannt – Browser-Fallback');
+                debug(platform + ' – Browser-Fallback');
+            }
+
+            /**
+             * Plattform-Routing:
+             * - Windows Desktop: SSO Proxy (WebView2 teilt Cookies mit Edge)
+             * - Web-Browser: SSO Proxy (Browser hat Entra Session-Cookie)
+             * - macOS / iOS / Android: Browser-Button (kein Cookie-Sharing)
+             */
+            function routeByPlatform() {
+                microsoftTeams.app.getContext().then(function (context) {
+                    var clientType = context.app.host.clientType || '';
+                    var isWindows = /Windows/i.test(navigator.userAgent);
+                    debug('clientType=' + clientType + ', isWindows=' + isWindows);
+
+                    if (clientType === 'web') {
+                        // Browser-Client: hat wahrscheinlich Entra Session
+                        loadViaProxy();
+                    } else if (clientType === 'desktop' && isWindows) {
+                        // Windows Desktop: WebView2 teilt Cookies mit Edge
+                        loadViaProxy();
+                    } else {
+                        // macOS Desktop, iOS, Android, iPadOS: kein Cookie-Sharing
+                        showBrowserFallback(clientType + (isWindows ? '/Win' : '/nonWin'));
+                    }
+                }).catch(function (err) {
+                    debug('getContext Fehler: ' + err.message);
+                    // Fallback: User-Agent prüfen
+                    if (/Windows/i.test(navigator.userAgent)) {
+                        loadViaProxy();
+                    } else {
+                        showBrowserFallback('UA-fallback');
+                    }
+                });
             }
 
             // ── SDK initialisieren und Kalender laden ──────────────────
@@ -187,12 +214,7 @@
             microsoftTeams.app.initialize().then(function () {
                 debug('SDK bereit');
                 ensureNotify();
-
-                if (isMobile()) {
-                    showMobileFallback();
-                } else {
-                    loadViaProxy();
-                }
+                routeByPlatform();
             }).catch(function (err) {
                 debug('SDK Fehler: ' + (err.message || err));
                 ensureNotify();
