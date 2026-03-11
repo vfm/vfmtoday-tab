@@ -4,6 +4,21 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>vfm Today</title>
+    <script>
+        // SOFORT prüfen – BEVOR das Teams SDK oder irgendwas anderes lädt.
+        // Auf allen Plattformen außer Windows Desktop: direkt weiterleiten.
+        // Der Entra Application Proxy kann den Login im Top-Level-Fenster
+        // normal durchführen (kein iframe = kein X-Frame-Options-Problem).
+        (function () {
+            var TARGET = 'https://vfmtoday.vfm.de/kalender';
+            var ua = navigator.userAgent || '';
+            var isWindowsDesktop = /Windows NT/i.test(ua) && !/Mobile|Mobi/i.test(ua);
+
+            if (!isWindowsDesktop) {
+                window.location.replace(TARGET);
+            }
+        })();
+    </script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         html, body { width: 100%; height: 100%; overflow: hidden; }
@@ -54,7 +69,7 @@
     </style>
 </head>
 <body>
-    <!-- Kalender-iFrame – wird sofort geladen -->
+    <!-- Kalender-iFrame (nur auf Windows Desktop) -->
     <iframe id="content" sandbox="allow-scripts allow-same-origin allow-forms"></iframe>
 
     <!-- Anmelde-Hinweis (nur bei Bedarf sichtbar) -->
@@ -71,26 +86,19 @@
             var TARGET_URL  = 'https://vfmtoday.vfm.de/kalender';
             var HINT_DELAY  = 4000; // Nach 4s Hinweis zeigen
 
-            var iframe    = document.getElementById('content');
-            var loginHint = document.getElementById('login-hint');
-            var loginBtn  = document.getElementById('login-btn');
+            var iframe     = document.getElementById('content');
+            var loginHint  = document.getElementById('login-hint');
+            var loginBtn   = document.getElementById('login-btn');
             var dismissBtn = document.getElementById('dismiss-btn');
-
-            var hintTimer = null;
-            var calendarLoaded = false;
+            var hintTimer  = null;
 
             /** Kalender im iframe laden */
             function loadKalender() {
                 iframe.src = TARGET_URL + '?_t=' + Date.now();
             }
 
-            /** Prüfen ob der iframe erfolgreich geladen hat */
+            /** iframe load-Event: Hinweis ausblenden */
             iframe.addEventListener('load', function () {
-                // Wenn der iframe geladen hat und die Entra-Session gültig ist,
-                // wird der Kalender angezeigt. Da wir wegen Cross-Origin den
-                // Inhalt nicht prüfen können, nehmen wir an dass alles OK ist
-                // und blenden den Hinweis aus.
-                calendarLoaded = true;
                 if (hintTimer) {
                     clearTimeout(hintTimer);
                     hintTimer = null;
@@ -102,7 +110,6 @@
             loginBtn.addEventListener('click', function (e) {
                 e.preventDefault();
                 window.open(TARGET_URL, '_blank');
-                // Nach dem Anmelden im neuen Tab: Hinweis ändern
                 loginHint.innerHTML =
                     '<div>Nach der Anmeldung hier klicken:</div>' +
                     '<a href="#" id="reload-btn" style="display:inline-block;margin-top:8px;padding:8px 24px;background:#0078d4;color:#fff;border:none;border-radius:4px;font-size:14px;text-decoration:none;cursor:pointer;">Kalender neu laden</a>';
@@ -119,49 +126,24 @@
                 loginHint.style.display = 'none';
             });
 
-            /** Cache-Bust-Reload des iframes */
-            function reloadContent() {
-                iframe.src = TARGET_URL + '?_t=' + Date.now();
-            }
-
             // Automatisches Neuladen alle 1 Stunde
-            setInterval(reloadContent, RELOAD_INTERVAL_MS);
+            setInterval(function () {
+                iframe.src = TARGET_URL + '?_t=' + Date.now();
+            }, RELOAD_INTERVAL_MS);
 
             // Neuladen wenn der Tab wieder sichtbar wird
             document.addEventListener('visibilitychange', function () {
                 if (document.visibilityState === 'visible') {
-                    reloadContent();
+                    iframe.src = TARGET_URL + '?_t=' + Date.now();
                 }
             });
 
-            // Teams SDK initialisieren, dann plattformabhängig laden
+            // Teams SDK initialisieren, dann Kalender laden (nur Windows Desktop)
             microsoftTeams.app.initialize().then(function () {
                 microsoftTeams.app.notifySuccess();
 
-                // Plattform ermitteln
-                return microsoftTeams.app.getContext();
-            }).then(function (context) {
-                var clientType = context.app.host.clientType;
-
-                // Mobile (iOS, Android, iPadOS): Direkt weiterleiten
-                // Kein iframe nötig – Entra-Auth funktioniert im Top-Level-WebView
-                if (clientType === 'android' || clientType === 'ios' || clientType === 'ipados') {
-                    window.location.href = TARGET_URL;
-                    return;
-                }
-
-                // macOS erkennen (clientType ist bei macOS auch 'desktop')
-                var isMac = /Macintosh|Mac OS X/i.test(navigator.userAgent);
-                if (isMac) {
-                    window.location.href = TARGET_URL;
-                    return;
-                }
-
-                // Desktop (Windows): iframe verwenden (Cookies via Edge geteilt)
                 loadKalender();
 
-                // Nach 4 Sekunden: Falls der iframe leer/blockiert ist,
-                // Anmelde-Hinweis einblenden
                 hintTimer = setTimeout(function () {
                     loginHint.style.display = 'block';
                 }, HINT_DELAY);
