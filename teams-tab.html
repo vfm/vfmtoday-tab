@@ -5,11 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>vfm Today</title>
     <script>
-        // Sofort-Erkennung: Echtes Mobilgerät (iPhone / Android-Handy)?
-        // macOS Desktop wird wie Windows behandelt (iframe-Ansatz).
+        // Erkennung: Nicht-Windows → Dialog-Ansatz (macOS, iPhone, Android)
+        // Nur Windows Desktop nutzt den iframe (WebView2 teilt Edge-Cookies).
         var _isMobile = (function () {
             var ua = navigator.userAgent || '';
-            return /iPhone|Android.*Mobile/i.test(ua);
+            return !/Windows NT/i.test(ua);
         })();
     </script>
     <style>
