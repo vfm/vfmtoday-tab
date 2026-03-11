@@ -94,10 +94,8 @@
             }
 
             /**
-             * Holt SSO-Token, tauscht es gegen ein Proxy-Auth-Token,
+             * Holt SSO-Token, tauscht es gegen eine Proxy-Session,
              * und lädt den Kalender direkt als iframe.src über den Proxy.
-             * Das iframe hat so die Proxy-Domain als Origin →
-             * alle Sub-Ressourcen und Navigation funktionieren.
              */
             function loadViaProxy() {
                 showStatus('Authentifizierung läuft…');
@@ -106,14 +104,13 @@
                 debug('getAuthToken...');
 
                 microsoftTeams.authentication.getAuthToken().then(function (token) {
-                    debug('Token erhalten, tausche gegen Proxy-Token...');
+                    if (!token) throw new Error('SSO-Token ist leer');
+                    debug('Token erhalten, erstelle Session...');
                     showStatus('Kalender wird geladen…');
 
                     return fetch(PROXY_BASE + '/_auth', {
                         method: 'GET',
-                        headers: {
-                            'Authorization': 'Bearer ' + token,
-                        },
+                        headers: { 'Authorization': 'Bearer ' + token },
                     });
                 }).then(function (resp) {
                     debug('Auth-Endpunkt Status: ' + resp.status);
@@ -126,11 +123,12 @@
                     }
                     return resp.json();
                 }).then(function (data) {
-                    var authToken = data._auth;
-                    debug('Proxy-Token erhalten (' + authToken.length + ' Zeichen)');
+                    var sid = data.s;
+                    if (!sid) throw new Error('Keine Session-ID erhalten');
+                    debug('Session: ' + sid);
                     statusDiv.style.display = 'none';
                     iframe.style.display = 'block';
-                    iframe.src = PROXY_BASE + '/kalender?_auth=' + encodeURIComponent(authToken);
+                    iframe.src = PROXY_BASE + '/kalender?s=' + sid;
                     ensureNotify();
                 }).catch(function (err) {
                     console.error('Proxy load failed:', err);
