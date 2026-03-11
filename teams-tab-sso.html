@@ -49,7 +49,7 @@
     <script>
         (function () {
             // ── Konfiguration ──────────────────────────────────────────
-            var PROXY_BASE = 'https://vfmtoday-proxy.azurewebsites.net/api/proxy';
+            var PROXY_BASE = 'https://vfmtoday-proxy.azurewebsites.net';
             var CALENDAR_URL = 'https://vfmtoday.vfm.de/kalender';
             var RELOAD_MS  = 60 * 60 * 1000; // 1 Stunde
 
@@ -94,11 +94,10 @@
             }
 
             /**
-             * Holt SSO-Token und lädt Kalender über den Proxy.
-             * Der Proxy liefert HTML mit umgeschriebenen URLs –
-             * alle Sub-Ressourcen (CSS, JS, Bilder) gehen ebenfalls
-             * über den Proxy mit verschlüsseltem Auth-Token.
-             * → Funktioniert auf ALLEN Plattformen.
+             * Holt SSO-Token, tauscht es gegen ein Proxy-Auth-Token,
+             * und lädt den Kalender direkt als iframe.src über den Proxy.
+             * Das iframe hat so die Proxy-Domain als Origin →
+             * alle Sub-Ressourcen und Navigation funktionieren.
              */
             function loadViaProxy() {
                 showStatus('Authentifizierung läuft…');
@@ -107,17 +106,17 @@
                 debug('getAuthToken...');
 
                 microsoftTeams.authentication.getAuthToken().then(function (token) {
-                    debug('Token erhalten, lade Proxy...');
+                    debug('Token erhalten, tausche gegen Proxy-Token...');
                     showStatus('Kalender wird geladen…');
 
-                    return fetch(PROXY_BASE, {
+                    return fetch(PROXY_BASE + '/_auth', {
                         method: 'GET',
                         headers: {
                             'Authorization': 'Bearer ' + token,
                         },
                     });
                 }).then(function (resp) {
-                    debug('Proxy Status: ' + resp.status);
+                    debug('Auth-Endpunkt Status: ' + resp.status);
                     if (!resp.ok) {
                         return resp.text().then(function (txt) {
                             var errMsg = 'HTTP ' + resp.status;
@@ -125,12 +124,14 @@
                             throw new Error(errMsg);
                         });
                     }
-                    return resp.text();
-                }).then(function (html) {
-                    debug('HTML empfangen: ' + html.length + ' Zeichen');
+                    return resp.json();
+                }).then(function (data) {
+                    var authToken = data._auth;
+                    debug('Proxy-Token erhalten (' + authToken.length + ' Zeichen)');
                     statusDiv.style.display = 'none';
                     iframe.style.display = 'block';
-                    iframe.srcdoc = html;
+                    iframe.src = PROXY_BASE + '/kalender?_auth=' + encodeURIComponent(authToken);
+                    ensureNotify();
                 }).catch(function (err) {
                     console.error('Proxy load failed:', err);
                     debug('Fehler: ' + (err.message || JSON.stringify(err)));
@@ -152,14 +153,14 @@
 
             // Auto-Reload (stündlich)
             setInterval(function () {
-                if (iframe.style.display !== 'none') {
+                if (iframe.style.display !== 'none' && iframe.src) {
                     loadViaProxy();
                 }
             }, RELOAD_MS);
 
             // Bei Tab-Wechsel neu laden
             document.addEventListener('visibilitychange', function () {
-                if (document.visibilityState === 'visible' && iframe.style.display !== 'none') {
+                if (document.visibilityState === 'visible' && iframe.style.display !== 'none' && iframe.src) {
                     loadViaProxy();
                 }
             });
