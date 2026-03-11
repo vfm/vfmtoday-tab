@@ -5,11 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>vfm Today</title>
     <script>
-        // Sofort-Erkennung: Nicht-Windows-Desktop?
-        // Merken für spätere Behandlung per Teams SDK.
-        var _isMobileOrMac = (function () {
+        // Sofort-Erkennung: Echtes Mobilgerät (iPhone / Android-Handy)?
+        // macOS Desktop wird wie Windows behandelt (iframe-Ansatz).
+        var _isMobile = (function () {
             var ua = navigator.userAgent || '';
-            return !/Windows NT/i.test(ua) || /Mobile|Mobi/i.test(ua);
+            return /iPhone|Android.*Mobile/i.test(ua);
         })();
     </script>
     <style>
@@ -174,7 +174,7 @@
             microsoftTeams.app.initialize().then(function () {
                 microsoftTeams.app.notifySuccess();
 
-                if (_isMobileOrMac) {
+                if (_isMobile) {
                     // Mobile / macOS: Kalender als Dialog innerhalb von Teams öffnen
                     mobileHint.style.display = 'flex';
 
