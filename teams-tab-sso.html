@@ -161,12 +161,38 @@
             // Sicherheits-Timeout: notifySuccess nach 2s
             setTimeout(ensureNotify, 2000);
 
+            /** Plattform-Erkennung: Mobile = kein Cookie-Sharing → Browser-Button */
+            function isMobile() {
+                var ua = navigator.userAgent || '';
+                return /iPhone|iPad|iPod|Android/i.test(ua);
+            }
+
+            /** Mobile: Direkt "Im Browser öffnen"-Button zeigen */
+            function showMobileFallback() {
+                ensureNotify();
+                showStatus('Tippe auf den Button, um den Kalender zu öffnen.');
+                browserBtn.style.display = 'inline-block';
+                browserBtn.textContent = 'Kalender öffnen';
+                // Primär-Style für den Button
+                browserBtn.style.background = '#0078d4';
+                browserBtn.style.color = '#fff';
+                browserBtn.style.border = 'none';
+                browserBtn.style.padding = '12px 32px';
+                browserBtn.style.fontSize = '16px';
+                debug('Mobile erkannt – Browser-Fallback');
+            }
+
             // ── SDK initialisieren und Kalender laden ──────────────────
             debug('SDK initialize...');
             microsoftTeams.app.initialize().then(function () {
                 debug('SDK bereit');
                 ensureNotify();
-                loadViaProxy();
+
+                if (isMobile()) {
+                    showMobileFallback();
+                } else {
+                    loadViaProxy();
+                }
             }).catch(function (err) {
                 debug('SDK Fehler: ' + (err.message || err));
                 ensureNotify();
